@@ -7,8 +7,16 @@
   "license": "ISC",
   "preferGlobal": true,
   "bin": "./app.js",
+  "scripts": {
+    "translate": "node app.js translate \"C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\"",
+    "compilate": "node app.js translate \"C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\" --no-translate"
+  },
   "dependencies": {
+    "@vitalets/google-translate-api": "^7.0.0",
     "commander": "^8.3.0",
+    "fs-extra": "^10.0.0",
+    "google-translate-api": "^2.3.0",
+    "jimp": "^0.16.1",
     "xml2js": "^0.4.23",
     "xmlbuilder": "^15.1.1"
   }
