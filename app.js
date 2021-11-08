@@ -1,83 +1,143 @@
-#!/usr/bin/env node
+const xml2js = require('xml2js')
+const {program} = require('commander')
+const path = require("path")
+const fs = require('fs')
+const builder = require('xmlbuilder')
 
-const commander = require('commander'),
-    xml2js = require('xml2js'),
-    fs = require('fs'),
-    translate = require('@k3rn31p4nic/google-translate-api'),
-    clear = require('clear'),
-    chalk = require('chalk'),
-    figlet = require('figlet')
+program.version('0.0.1')
 
 const parser = new xml2js.Parser()
-const builder = new xml2js.Builder()
 
-clear()
-console.log(
-    chalk.yellow(
-        figlet.textSync('RimWorld-TransHelper', {horizontalLayout: 'full'})
-    )
-)
+const localDirMods = path.resolve(__dirname, 'mods')
+const dirMods = path.normalize('C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100')
+const mods = []
 
-commander
-    .version('0.0.3')
-    .description(
-        chalk.green('RimWorld-TransHelper')
-    )
+function createNewModTranslate(original, pathOriginal) {
+    const nameOriginal = original['ModMetaData'].name[0]
+    const name = `${nameOriginal} [RU version]`
+    const author = 'SmileDie'
+    const description = 'Авто перевод мода на русский язык'
+    const packageIdOriginal = original['ModMetaData']['packageId'][0]
+    const packageIdOriginalName = packageIdOriginal.split('.')[1]
+    const packageId = `SmileDie.${packageIdOriginalName}Ru`
+    const supportedVersionsOriginal = original['ModMetaData']['supportedVersions'][0]
 
-commander.command('translate <file>')
-    .option('--to <value>', 'What language to translate into')
-    .option('--from <value>', 'What language to translate from')
-    .option('--output', 'Output the finished file to the console')
-    .option('--fix-line-breaks', 'Correct curves translated line breaks \\n')
-    .description(chalk.green(
-        'Translating an xml file from one language to another')
-    )
-    .action((patch, cmd) => {
-
-        let _from = cmd.from || "auto",
-            _to = cmd.to || "ru"
-
-        fs.readFile(patch, function (err, data) {
-            parser.parseString(data, async (err, result) => {
-
-                console.info("Reading a file...")
-
-                if (result["LanguageData"]) {
-
-                    for (let key in result["LanguageData"]) {
-                        if (result["LanguageData"][key].length > 0) {
-
-                            const arrStrings = []
-
-                            for (let i = 0; i < result["LanguageData"][key].length; i++) {
-                                let translation = await translate(result["LanguageData"][key][i], {
-                                    from: _from,
-                                    to: _to
-                                })
-
-                                if(cmd["fix-line-breaks"]) translation.text = translation.text.replace(/ {0,3}\\.{0,2}n {0,3}/gmi, "\\n")
-
-                                arrStrings.push(translation.text)
-                                console.info(chalk.green(`\nTranslate string complete.\n`), chalk.grey(`From: ${key} - ${result["LanguageData"][key][i]}\n`), chalk.white(`To: ${key} - ${translation.text}`))
-                            }
-
-                            result["LanguageData"][key] = arrStrings
-                        } else {
-                            console.warn(`Warning: ${result["LanguageData"][key]} - irrelevant`)
+    const supportedVersions = supportedVersionsOriginal.li.map(item => {
+        return {
+            '#text': item,
+        }
+    })
+    const loadAfter = {
+        loadAfter: {
+            li: {
+                '#text': packageIdOriginal,
+            }
+        }
+    }
+    const xmlObj = {
+        ModMetaData: {
+            name: {
+                '#text': name,
+            },
+            author: {
+                '#text': author,
+            },
+            description: {
+                '#text': description,
+            },
+            packageId: {
+                '#text': packageId,
+            },
+            modDependencies: [
+                {
+                    li: {
+                        packageId: {
+                            '#text': packageIdOriginal,
+                        },
+                        displayName: {
+                            '#text': nameOriginal,
                         }
                     }
-
-                    let writeXML = builder.buildObject(result)
-                    fs.writeFile(patch, writeXML, function (err) {
-                        if (err) console.error(err)
-                        else console.info(chalk.bold(chalk.green(`\n\nTranslation successful.\n\nFile ${patch} was translated from: ${_from}, on the ${_to}`)), cmd.output ? chalk.white(`\n\nOutput:\n${writeXML}`) : '')
-
-                    })
-                } else {
-                    console.error(`Invalid file format: Missing "LanguageData" line`)
                 }
-            })
-        })
-    })
+            ],
+            supportedVersions: {
+                li: supportedVersions
+            },
+            ...loadAfter
+        }
+    }
 
-commander.parse(process.argv)
+    const xml = builder.create(xmlObj)
+        .end({pretty: true});
+
+    try {
+        const modDir = path.resolve(localDirMods, name)
+        const modDirAbout = path.resolve(modDir, 'About')
+        const modDirAboutFile = path.resolve(modDirAbout, 'About.xml')
+
+        if (!fs.existsSync(modDir))
+            fs.mkdirSync(modDir)
+
+        if (!fs.existsSync(modDirAbout))
+            fs.mkdirSync(modDirAbout)
+
+        if (!fs.existsSync(modDirAboutFile))
+            fs.writeFileSync(modDirAboutFile, xml)
+
+        const files = fs.readdirSync(path.resolve(pathOriginal, 'About'))
+        for (const file of files) {
+            if(file.toLowerCase() === 'preview.png') {
+                const inPreview = path.resolve(pathOriginal, 'About', file)
+                const outPreview = path.resolve(modDirAbout, 'preview.png')
+
+                fs.copyFileSync(inPreview, outPreview)
+            }
+        }
+
+    } catch (e) {}
+}
+
+async function runTranslate(source) {
+    if (!fs.existsSync(localDirMods)) {
+        fs.mkdirSync(localDirMods)
+    }
+
+    const dirs = fs.readdirSync(dirMods)
+
+    for (const dir of dirs) {
+        const dirsMode = path.join(dirMods, dir, 'Languages')
+
+        const isExist = fs.existsSync(dirsMode)
+        if (isExist) {
+            const dirLangModUs = path.join(dirsMode, 'English')
+            const dirLangModRu = path.join(dirsMode, 'Russian')
+
+            const isExistLangRu = fs.existsSync(dirLangModRu)
+            if (!isExistLangRu) {
+                const isExistLangUs = fs.existsSync(dirLangModUs)
+                if (isExistLangUs) {
+                    mods.push(dir)
+                }
+            }
+        }
+    }
+
+    for (const mod of mods) {
+        const modAboutPath = path.join(dirMods, mod, 'About', 'About.xml')
+        const isModAbout = fs.existsSync(modAboutPath)
+
+        if (isModAbout) {
+            fs.readFile(modAboutPath, function (err, data) {
+                parser.parseString(data, async (err, result) => {
+                    createNewModTranslate(result, path.join(dirMods, mod))
+                })
+            })
+        }
+    }
+}
+
+program
+    .command('translate <source>')
+    .action(runTranslate)
+
+program.parse(process.argv)
